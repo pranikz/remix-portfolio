@@ -14,30 +14,33 @@ export default async function handleRequest(
   responseStatusCode: number,
   responseHeaders: Headers,
   remixContext: EntryContext,
-  // This is ignored so we can keep it in the template for visibility.  Feel
-  // free to delete this parameter in your app if you're not using it!
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   loadContext: AppLoadContext
 ) {
-  const body = await renderToReadableStream(
+  let didError = false;
+
+  const stream = await renderToReadableStream(
     <RemixServer context={remixContext} url={request.url} />,
     {
       signal: request.signal,
       onError(error: unknown) {
-        // Log streaming rendering errors from inside the shell
+        didError = true;
         console.error(error);
-        responseStatusCode = 500;
       },
     }
   );
 
-  if (isbot(request.headers.get("user-agent") || "")) {
-    await body.allReady;
+  if (isbot(request.headers.get("user-agent"))) {
+    try {
+      await stream.allReady;
+    } catch (error) {
+      console.error('Error during stream ready:', error);
+    }
   }
 
   responseHeaders.set("Content-Type", "text/html");
-  return new Response(body, {
+
+  return new Response(stream, {
+    status: didError ? 500 : responseStatusCode,
     headers: responseHeaders,
-    status: responseStatusCode,
   });
 }
